@@ -1,0 +1,52 @@
+# c3po
+
+## Cilium install
+
+The cluster WILL NOT show as ready for the control plane, so just run the following commands when you see the node added, and can `kubectl get nodes`.
+
+Install the CRDs, add the helm repo, and create the namespace:
+
+```sh
+kubectl create namespace certificate
+
+helm repo add cilium https://helm.cilium.io/
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml \
+  -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml \
+  -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/standard/gateway.networking.k8s.io_referencegrants.yaml \
+  -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/experimental/gateway.networking.k8s.io_gateways.yaml \
+  -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/experimental/gateway.networking.k8s.io_tlsroutes.yaml \
+  -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v1.2.1/config/crd/experimental/gateway.networking.k8s.io_grpcroutes.yaml
+```
+
+Installing Cilium is pretty straight forward, but I have not been able to get it to work on another namespace.
+
+```sh
+export cilium_applicationyaml=$(curl -sL "https://raw.githubusercontent.com/mikedelgaudio/c3po/refs/heads/main/naboo/kube-system/cilium/application.yaml" | yq eval-all '. | select(.metadata.name == "cilium-application" and .kind == "Application")' -)
+export cilium_name=$(echo "$cilium_applicationyaml" | yq eval '.metadata.name' -)
+export cilium_chart=$(echo "$cilium_applicationyaml" | yq eval '.spec.source.chart' -)
+export cilium_repo=$(echo "$cilium_applicationyaml" | yq eval '.spec.source.repoURL' -)
+export cilium_namespace=$(echo "$cilium_applicationyaml" | yq eval '.spec.destination.namespace' -)
+export cilium_version=$(echo "$cilium_applicationyaml" | yq eval '.spec.source.targetRevision' -)
+export cilium_values=$(echo "$cilium_applicationyaml" | yq eval '.spec.source.helm.valuesObject' -)
+
+echo "$cilium_values" | helm template $cilium_name $cilium_chart --repo $cilium_repo --version $cilium_version --namespace $cilium_namespace --values - | kubectl apply --namespace $cilium_namespace --filename -
+```
+
+## Argocd Setup
+
+```sh
+export argocd_applicationyaml=$(curl -sL "https://raw.githubusercontent.com/mikedelgaudio/c3po/refs/heads/main/naboo/argocd/argocd/application.yaml" | yq eval-all '. | select(.metadata.name == "argocd-application" and .kind == "Application")' -)
+export argocd_name=$(echo "$argocd_applicationyaml" | yq eval '.metadata.name' -)
+export argocd_chart=$(echo "$argocd_applicationyaml" | yq eval '.spec.source.chart' -)
+export argocd_repo=$(echo "$argocd_applicationyaml" | yq eval '.spec.source.repoURL' -)
+export argocd_namespace=$(echo "$argocd_applicationyaml" | yq eval '.spec.destination.namespace' -)
+export argocd_version=$(echo "$argocd_applicationyaml" | yq eval '.spec.source.targetRevision' -)
+export argocd_values=$(echo "$argocd_applicationyaml" | yq eval '.spec.source.helm.valuesObject' - | yq eval 'del(.configs.cm)' -)
+export argocd_config=$(curl -sL "https://raw.githubusercontent.com/mikedelgaudio/c3po/refs/heads/main/naboo/argocd/argocd/appset.yaml" | yq eval-all '. | select(.kind == "AppProject" or .kind == "ApplicationSet")' -)
+
+
+echo "$argocd_values" | helm template $argocd_name $argocd_chart --repo $argocd_repo --version $argocd_version --namespace $argocd_namespace --values - | kubectl apply --namespace $argocd_namespace --filename -
+
+echo "$argocd_config" | kubectl apply --filename -
+```
