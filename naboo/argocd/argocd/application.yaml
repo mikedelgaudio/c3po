@@ -42,8 +42,8 @@ spec:
         # For a non-HA setup, ensure redis.enabled is true (default) or explicitly set it.
         redis:
           enabled: true
-  # syncPolicy:
-  #   automated:
-  #     allowEmpty: true
-  #     prune: true
-  #     selfHeal: true
+  syncPolicy:
+    automated:
+      allowEmpty: true
+      prune: true
+      selfHeal: true
